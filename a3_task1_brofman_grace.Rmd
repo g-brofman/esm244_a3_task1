@@ -1,0 +1,120 @@
+---
+title: "Task 1: Spatial data visualization"
+author: "Grace Brofman"
+date: "2/18/2021"
+output: 
+  html_document:
+    code_folding: hide
+   
+
+
+---
+
+```{r setup, include=FALSE, message = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+## **Overview:**
+The California DFW's Office of Spill Prevention and Response tracks inland and marine oil spill incidents across the state. Incident data provides details regarding type, location, and other details for statistical evaluation. Here, oil spill data is used to map specific spill locations, as well as give an overview of county specific spill densities. See more detail [(here)](https://apps.wildlife.ca.gov/bios/?al=ds394) and [(here)](https://map.dfg.ca.gov/metadata/ds0394.html).
+
+### **Part 1:** Interactive oil spill map
+
+```{r, message = FALSE, warning = FALSE}
+
+library(tidyverse)
+library(here)
+library(sf)
+library(spatstat)
+library(maptools) 
+library(sp)
+library(raster)
+library(tmap)
+library(janitor)
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+#read in spill data
+spills <- read_sf(dsn = here("ds394"),
+                  layer = "ds394") %>% 
+  clean_names()
+
+#plot(spills)
+
+# check projection - NAD83/California Albers / EPSG 3310
+#st_crs(spills)
+
+# read in county data
+counties <- read_sf(here("ca_counties"),
+                    layer = "ca_counties_TIGER2016")
+
+# check projection - WGS84 / EPSG 3857
+
+#st_crs(counties)
+
+# projections differ, so transform one CRS to the other:
+spills <- st_transform(spills, st_crs(counties))
+
+#st_crs(spills)
+#st_crs(counties) # now both have the same projection (WGS84)
+
+# plotting these two datasets:
+
+#ggplot() +
+#  geom_sf(data = counties) +
+#  geom_sf(data = spills)
+
+```
+
+```{r, message = FALSE, warning = FALSE}
+# use tmap to make interactive
+tmap_mode("view")
+
+map_1 <- tm_shape(spills) + # using spills df
+  tm_dots("specificlo", title = "CA Oil spill locations") + # dots colored by location (fresh water, land, marine)
+  tm_layout(title = "my title", title.position = c("right", "top"), legend.title.color = "blue", legend.position = c("left", "top")) +
+  tm_legend(title = "my title") 
+# use tm_view: https://rdrr.io/cran/tmap/man/tm_view.html
+# https://www.rdocumentation.org/packages/tmap/versions/3.3/topics/tm_layout
+# https://rdrr.io/cran/tmap/man/tm_symbols.html
+# use tm_polygons later?
+
+map_1
+```
+**Figure 1:** Oil spill locations in California in 2008
+
+### **Part 2:** Chloropleth map of spills by county
+
+```{r, message = FALSE, warning = FALSE}
+inland_spills <- spills %>% 
+  filter(inlandmari == "Inland") %>% 
+  count(localecoun, sort = TRUE) # counting the number of spill events in each county
+
+
+#ggplot() +
+#  geom_sf(data = counties) +
+#  geom_sf(data = inland_spills,
+#          aes(fill = localecoun))
+
+# joining datasets
+
+county_spills <- counties %>% 
+  st_join(inland_spills)
+
+# find counts
+county_spill_counts <- county_spills %>% 
+  count(localecoun)
+
+# plot
+ggplot(data = county_spills) +
+  geom_sf(aes(fill = n), color = "white", size = 0.1) +
+  scale_fill_gradientn(colors = c("khaki", "orangered", "orangered4")) +
+  theme_light() +
+  labs(fill = "Inland oil spills per county")
+```
+**Figure 2:** Inland oil spills per county in California in 2008
+
+
+### **References**
+California Department of Fish and Game, Office of Spill Prevention and Response, 2008."Oil Spill Incident Tracking [ds394]". Published 07-23-2009.
